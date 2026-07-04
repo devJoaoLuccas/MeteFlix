@@ -1,0 +1,115 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CoupleStatus {
+  PENDING // convite criado, aguardando o segundo usuário
+  ACTIVE  // os dois usuários vinculados
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  email        String   @unique
+  passwordHash String
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  coupleAsUser1      Couple?        @relation("User1Couple")
+  coupleAsUser2      Couple?        @relation("User2Couple")
+  wishlistItemsAdded WishlistItem[] @relation("AddedBy")
+  ratings            Rating[]
+
+  @@map("users")
+}
+
+model Couple {
+  id         String       @id @default(uuid())
+  inviteCode String       @unique
+  status     CoupleStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+
+  user1Id String @unique
+  user1   User   @relation("User1Couple", fields: [user1Id], references: [id])
+
+  user2Id String? @unique
+  user2   User?   @relation("User2Couple", fields: [user2Id], references: [id])
+
+  wishlistItems WishlistItem[]
+  watchHistory  WatchHistory[]
+
+  @@map("couples")
+}
+
+model Movie {
+  id          String   @id @default(uuid())
+  tmdbId      Int      @unique
+  title       String
+  posterPath  String?
+  overview    String?
+  releaseYear Int?
+  createdAt   DateTime @default(now())
+
+  wishlistItems WishlistItem[]
+  watchHistory  WatchHistory[]
+
+  @@map("movies")
+}
+
+model WishlistItem {
+  id        String   @id @default(uuid())
+  watched   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  coupleId String
+  couple   Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id])
+
+  addedById String
+  addedBy   User   @relation("AddedBy", fields: [addedById], references: [id])
+
+  // um mesmo filme não pode ser adicionado duas vezes na wishlist do mesmo casal
+  @@unique([coupleId, movieId])
+  @@map("wishlist_items")
+}
+
+model WatchHistory {
+  id        String   @id @default(uuid())
+  watchedAt DateTime @default(now())
+
+  coupleId String
+  couple   Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id])
+
+  ratings Rating[]
+
+  @@map("watch_history")
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  nota      Int // 1-10, validar no backend (Prisma não impõe CHECK por padrão)
+  opiniao   String?
+  createdAt DateTime @default(now())
+
+  watchHistoryId String
+  watchHistory   WatchHistory @relation(fields: [watchHistoryId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // cada usuário só pode avaliar uma vez cada sessão de exibição
+  @@unique([watchHistoryId, userId])
+  @@map("ratings")
+}

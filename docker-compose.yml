@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: meteflix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "clarisse2912@"
+      POSTGRES_DB: MeteFlix
+    ports:
+      # 5433 no host para não conflitar com o container devJoaoMarques-bd (5432)
+      - "5433:5432"
+    volumes:
+      - meteflix_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d MeteFlix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  meteflix_pgdata:
