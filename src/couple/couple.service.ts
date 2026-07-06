@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AceitarConvite } from './DTO/Couple';
+import { AceitarConvite } from '../DTO/Couple';
 import { CoupleStatus } from 'generated/prisma/enums';
 
 @Injectable()
@@ -66,7 +66,7 @@ export class CoupleService {
             throw new NotFoundException('O usuário não informou um invite code');
         }
 
-        const [usuario, couple] = await Promise.all([
+        const [usuario, casal] = await Promise.all([
             this.prisma.user.findUnique({
                 where: {
                     id: data.usuarioId,
@@ -84,19 +84,19 @@ export class CoupleService {
                     status: 'PENDING'
                 },
             })
-        ])
+        ]);
 
         if (!usuario) {
             throw new NotFoundException('O usuário não foi encontrado');
-        } else if (usuario.coupleAsUser1 || usuario.coupleAsUser2) {
+        } else if (usuario.coupleAsUser1 && usuario.coupleAsUser2) {
             throw new ForbiddenException('O usuário já está em um casal');
         }
 
-        if (!couple) {
+        if (!casal) {
             throw new NotFoundException('O casal não foi encontrado');
-        } else if (couple.status === 'ACTIVE') {
+        } else if (casal.status === 'ACTIVE') {
             throw new UnauthorizedException('O casal já está ativo');
-        } else if (couple.user1Id === usuario.id) {
+        } else if (casal.user1Id === usuario.id) {
             throw new UnauthorizedException('Você não pode aceitar seu próprio convite');
         }
 
@@ -115,6 +115,34 @@ export class CoupleService {
             code: 200,
             message: 'Convite aceito com sucesso'
         }
+    }
+
+    async sairDoCasal(casalId: string, usuarioId: string) {
+        const casal = await this.prisma.couple.findUnique({
+            where: {
+                id: casalId,
+                OR: [
+                    { user1Id: usuarioId },
+                    { user2Id: usuarioId },
+                ],
+            },
+        });
+
+        if (!casal) {
+            throw new NotFoundException('O casal nao foi encontrado');
+        }
+
+        if (casal.status === 'PENDING') {
+            throw new ForbiddenException('Nao e possivel sair de um casal com convite pendente');
+        }
+
+        await this.prisma.couple.delete({
+            where: {
+                id: casal.id,
+            },
+        });
+
+        return { code: 200, message: 'Usuario saiu com sucesso do casal' };
     }
 
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Request, UnauthorizedException, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Request, UnauthorizedException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { CoupleService } from './couple.service';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
@@ -44,6 +44,15 @@ export class CoupleController {
     return this.coupleService.joinCouple(data);
 
 
+  }
+
+  @Delete(':id/leave')
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @UseGuards(AuthGuard)
+  sair(@Param('id') casalId: string,
+    @Request() req: { usuario: TokenPayload }) {
+
+    return this.coupleService.sairDoCasal(casalId, req.usuario.sub);
   }
 
 }
