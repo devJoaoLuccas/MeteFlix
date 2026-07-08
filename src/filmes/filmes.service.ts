@@ -1,33 +1,34 @@
-import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { Prisma } from 'generated/prisma/client';
-import { AdicionarFilme, ListarWishlist } from 'src/DTO/Filmes';
+import { AdicionarFilme, ListarWishlist, RemoverFilme } from 'src/DTO/Filmes';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class FilmesService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    ) { }
+
+    private async atualizarCacheDaWishlist(casalId: string) {
+        const chaves = [
+            `/filmes/wishlist/${casalId}`,
+            `/filmes/wishlist/${casalId}?assistidos=true`,
+            `/filmes/wishlist/${casalId}?assistidos=false`,
+        ];
+
+        await Promise.all(chaves.map((chave) => this.cache.del(chave)));
+    }
 
     async listarWishlist(data: ListarWishlist) {
 
-        const casal = await this.prisma.couple.findUnique({
-            where: {
-                id: data.casalId,
-                OR: [
-                    { user1Id: data.usuarioId},
-                    { user2Id: data.usuarioId},
-                ],
-            },
-        })
-
-        if (!casal) {
-            throw new NotFoundException('Nao foi possivel encontrar o casal');
-        } else if (casal.status === 'PENDING') {
-            throw new ForbiddenException('O casal nao esta ativo');
-        }
+        await this.validarCasal(data.casalId, data.usuarioId);
 
         const watchlist = await this.prisma.wishlistItem.findMany({
             where: {
-                coupleId: casal.id,
+                coupleId: data.casalId,
                 watched: data.status,
             }, 
             select: {
@@ -56,13 +57,13 @@ export class FilmesService {
         const [assistidos, semAssistir] = await Promise.all([
             this.prisma.wishlistItem.count({
                 where: {
-                    coupleId: casal.id,
+                    coupleId: data.casalId,
                     watched: true,
                 },
             }),
             this.prisma.wishlistItem.count({
                 where: {
-                    coupleId: casal.id,
+                    coupleId: data.casalId,
                     watched: false,
                 },
             }),
@@ -79,19 +80,7 @@ export class FilmesService {
             throw new BadRequestException('Os dados nescessarios nao foram informados');
         }
 
-        const buscaCouple = await this.prisma.couple.findUnique({
-            where: {
-                id: data.casalId,
-            },
-        });
-
-        if (!buscaCouple) {
-            throw new NotFoundException('O casal nao foi encontrado');
-        } else if (buscaCouple.status === 'PENDING') {
-            throw new ForbiddenException('O casal esta como pendente');
-        } else if (buscaCouple.user1Id !== data.usuarioId && buscaCouple.user2Id !== data.usuarioId) {
-            throw new UnauthorizedException('O usuario nao faz parte do casal');
-        }
+        await this.validarCasal(data.casalId, data.usuarioId);
 
         const filmeLocal = await this.prisma.movie.findUnique({
             where: {
@@ -131,8 +120,74 @@ export class FilmesService {
             throw error;
         }
 
+        await this.atualizarCacheDaWishlist(data.casalId);
+
         return {code: 201, message: 'O filme foi adicionado com sucesso!'}
 
+    }
+
+    async removerFilme (data: RemoverFilme) {
+        if (!data.casalId || !data.tmdbId || !data.usuarioId) {
+            throw new BadRequestException('Os dados nescessarios nao foram informadoss');
+        }
+
+        await this.validarCasal(data.casalId, data.usuarioId);
+
+        const validaWishlist = await this.prisma.wishlistItem.findFirst({
+            where: {
+                coupleId: data.casalId,
+                movie: {
+                    tmdbId: data.tmdbId,
+                },
+            },
+            select: {
+                id: true,
+                watched: true,
+                addedBy: {
+                    select: {
+                        id: true,
+                    },
+                },
+            },
+        })
+
+        if (!validaWishlist) {
+            throw new NotFoundException('Nao foi possivel encontrar o filme');
+        } else if (validaWishlist.watched) {
+            throw new ForbiddenException('O casal ja assistiu o filme, nao podemos remover');
+        } else if (validaWishlist.addedBy.id !== data.usuarioId) {
+            throw new ForbiddenException('O usuario nao pode remover o filme, adicionado pelo outro');
+        }
+
+        await this.prisma.wishlistItem.delete({
+            where: {
+                id: validaWishlist.id,
+                coupleId: data.casalId,
+            }
+        })
+
+        await this.atualizarCacheDaWishlist(data.casalId);
+
+        return {code: 200, message: 'O filme foi removido com sucesso!'}
+
+    }
+
+    private async validarCasal(casalId: string, usuarioId: string) {
+        const casal = await this.prisma.couple.findUnique({
+            where: {
+                id: casalId,
+            },
+        });
+
+        if (!casal) {
+            throw new NotFoundException('O casal nao foi encontrado');
+        } else if (casal.user1Id !== usuarioId && casal.user2Id !== usuarioId) {
+            throw new ForbiddenException('O usuario nao faz parte do casal');
+        } else if (casal.status === 'PENDING') {
+            throw new ForbiddenException('O casal nao esta ativo');
+        }
+
+        return casal;
     }
 
     private async buscarFilmeTmdb(tmdbId: number) {

@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
 import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { FilmesService } from './filmes.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('filmes')
 export class FilmesController {
@@ -24,6 +25,7 @@ export class FilmesController {
     }
 
     @Post('wishlist/:casalId')
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
     @UseGuards(AuthGuard)
     adicionarFilme(
         @Param('casalId') casalId: string,
@@ -31,6 +33,21 @@ export class FilmesController {
         @Request() req: { usuario: TokenPayload },
     ) {
         return this.filmesService.adicionarFilme({
+            casalId,
+            tmdbId,
+            usuarioId: req.usuario.sub,
+        });
+    }
+
+    @Delete('wishlist/:casalId/:tmdbId')
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @UseGuards(AuthGuard)
+    removerFilme(
+        @Param('casalId') casalId: string,
+        @Param('tmdbId', ParseIntPipe) tmdbId: number,
+        @Request() req: { usuario: TokenPayload },
+    ) {
+        return this.filmesService.removerFilme({
             casalId,
             tmdbId,
             usuarioId: req.usuario.sub,

@@ -9,3 +9,9 @@ export interface AdicionarFilme {
     usuarioId: string;
     tmdbId: number;
 }
+
+export interface RemoverFilme { 
+    casalId: string;
+    usuarioId: string;
+    tmdbId: number;
+}
