@@ -1,12 +1,32 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { randomBytes } from 'crypto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AceitarConvite } from '../DTO/Couple';
+import { AceitarConvite, Casal } from '../DTO/Couple';
 import { CoupleStatus } from 'generated/prisma/enums';
 
 @Injectable()
 export class CoupleService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    ) { }
+
+    private async atualizarCacheDoCasal(casal: Casal) {
+        const chaves = [
+            `/couples/me:user:${casal.user1Id}`,
+            `/filmes/wishlist/${casal.id}`,
+            `/filmes/wishlist/${casal.id}?assistidos=true`,
+            `/filmes/wishlist/${casal.id}?assistidos=false`,
+        ];
+
+        if (casal.user2Id) {
+            chaves.push(`/couples/me:user:${casal.user2Id}`);
+        }
+
+        await Promise.all(chaves.map((chave) => this.cache.del(chave)));
+    }
 
     async coupleDoUsuario(usuarioId: string) {
         const couple = await this.prisma.couple.findFirst({
@@ -141,6 +161,8 @@ export class CoupleService {
                 id: casal.id,
             },
         });
+
+        await this.atualizarCacheDoCasal(casal);
 
         return { code: 200, message: 'Usuario saiu com sucesso do casal' };
     }

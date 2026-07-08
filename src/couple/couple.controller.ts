@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Request, UnauthorizedException, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { CoupleService } from './couple.service';
-import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { Throttle } from '@nestjs/throttler';
+import { UserCacheInterceptor } from 'src/common/user-cache.interceptor';
 
 @Controller('couples')
 export class CoupleController {
@@ -22,8 +23,7 @@ export class CoupleController {
   }
 
   @Get('me')
-  @UseInterceptors(CacheInterceptor)
-  @CacheKey('couple:me')
+  @UseInterceptors(UserCacheInterceptor)
   @CacheTTL(30000)
   @UseGuards(AuthGuard)
   me(@Request() req: { usuario: TokenPayload }) {
