@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
 import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { FilmesService } from './filmes.service';
@@ -20,6 +20,20 @@ export class FilmesController {
             casalId,
             usuarioId: req.usuario.sub,
             status: assistidos === 'true',
+        });
+    }
+
+    @Post('wishlist/:casalId')
+    @UseGuards(AuthGuard)
+    adicionarFilme(
+        @Param('casalId') casalId: string,
+        @Body('tmdbId') tmdbId: number,
+        @Request() req: { usuario: TokenPayload },
+    ) {
+        return this.filmesService.adicionarFilme({
+            casalId,
+            tmdbId,
+            usuarioId: req.usuario.sub,
         });
     }
 }
