@@ -8,3 +8,11 @@ export interface DetalheAvaliacao {
     usuarioId: string;
     tmdbId: number;
 }
+
+export interface CriarAvaliacao {
+    casalId: string;
+    usuarioId: string;
+    tmdbId: number;
+    nota: number;
+    opiniao?: string | null;
+}

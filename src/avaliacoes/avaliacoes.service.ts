@@ -1,10 +1,27 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { DashboardCasal, DetalheAvaliacao } from 'src/DTO/Avaliacoes';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { Prisma } from 'generated/prisma/client';
+import { CriarAvaliacao, DashboardCasal, DetalheAvaliacao } from 'src/DTO/Avaliacoes';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class AvaliacoesService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    ) { }
+
+    private async atualizarCacheDeAvaliacoes(casalId: string, tmdbId: number, usuarioIds: (string | null)[]) {
+        const chaves = usuarioIds
+            .filter((usuarioId): usuarioId is string => Boolean(usuarioId))
+            .flatMap((usuarioId) => [
+                `/avaliacoes/casal/${casalId}/dashboard:user:${usuarioId}`,
+                `/avaliacoes/casal/${casalId}/filme/${tmdbId}:user:${usuarioId}`,
+            ]);
+
+        await Promise.all(chaves.map((chave) => this.cache.del(chave)));
+    }
 
     async getDashboardCasal(data: DashboardCasal) {
         if (!data.casalId || !data.usuarioId) {
@@ -150,6 +167,77 @@ export class AvaliacoesService {
             watchedAt: sessao.watchedAt,
             coupleRating: Math.round(coupleRating * 100) / 100,
             evaluations,
+        };
+
+    }
+
+    async criarAvaliacao(data: CriarAvaliacao) {
+        if (!data.casalId || !data.usuarioId || !data.tmdbId || data.nota === undefined || data.nota === null) {
+            throw new BadRequestException('Os dados nescessarios nao foram informados');
+        }
+
+        if (!Number.isInteger(data.nota) || data.nota < 1 || data.nota > 10) {
+            throw new BadRequestException('A nota deve ser um numero inteiro entre 1 e 10');
+        }
+
+        const casal = await this.validarCasal(data.casalId, data.usuarioId);
+
+        const sessao = await this.prisma.watchHistory.findFirst({
+            where: {
+                coupleId: data.casalId,
+                movie: {
+                    tmdbId: data.tmdbId,
+                },
+            },
+            orderBy: {
+                watchedAt: 'desc',
+            },
+            select: {
+                id: true,
+            },
+        });
+
+        if (!sessao) {
+            throw new NotFoundException('O casal ainda nao assistiu esse filme');
+        }
+
+        let avaliacao: { id: string, nota: number, opiniao: string | null, createdAt: Date };
+
+        try {
+            avaliacao = await this.prisma.rating.create({
+                data: {
+                    watchHistory: {
+                        connect: { id: sessao.id },
+                    },
+                    user: {
+                        connect: { id: data.usuarioId },
+                    },
+                    nota: data.nota,
+                    opiniao: data.opiniao ?? null,
+                },
+                select: {
+                    id: true,
+                    nota: true,
+                    opiniao: true,
+                    createdAt: true,
+                },
+            });
+        } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                throw new ConflictException('O usuario ja avaliou esse filme');
+            }
+            throw error;
+        }
+
+        await this.atualizarCacheDeAvaliacoes(data.casalId, data.tmdbId, [casal.user1Id, casal.user2Id]);
+
+        return {
+            id: avaliacao.id,
+            movieId: data.tmdbId,
+            userId: data.usuarioId,
+            rating: avaliacao.nota,
+            comment: avaliacao.opiniao,
+            createdAt: avaliacao.createdAt,
         };
 
     }

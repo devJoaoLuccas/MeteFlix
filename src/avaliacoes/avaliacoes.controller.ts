@@ -1,4 +1,5 @@
-import { Controller, Get, Param, ParseIntPipe, Request, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Request, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { UserCacheInterceptor } from 'src/common/user-cache.interceptor';
@@ -35,6 +36,25 @@ export class AvaliacoesController {
             casalId,
             usuarioId: req.usuario.sub,
             tmdbId,
+        });
+    }
+
+    @Post('casal/:casalId/filme/:tmdbId')
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @UseGuards(AuthGuard)
+    criarAvaliacao(
+        @Param('casalId') casalId: string,
+        @Param('tmdbId', ParseIntPipe) tmdbId: number,
+        @Body('rating') rating: number,
+        @Body('comment') comment: string | undefined,
+        @Request() req: { usuario: TokenPayload },
+    ) {
+        return this.avaliacoesService.criarAvaliacao({
+            casalId,
+            usuarioId: req.usuario.sub,
+            tmdbId,
+            nota: rating,
+            opiniao: comment,
         });
     }
 }
