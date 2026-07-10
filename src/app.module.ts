@@ -7,6 +7,7 @@ import { CoupleModule } from './couple/couple.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
 import { FilmesModule } from './filmes/filmes.module';
+import { AvaliacoesModule } from './avaliacoes/avaliacoes.module';
 
 @Module({
   imports: [
@@ -20,7 +21,8 @@ import { FilmesModule } from './filmes/filmes.module';
     CacheModule.register({
       isGlobal: true,
     }),
-    FilmesModule],
+    FilmesModule,
+    AvaliacoesModule],
   controllers: [AppController],
   providers: [AppService],
 })
