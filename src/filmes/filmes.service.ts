@@ -12,12 +12,16 @@ export class FilmesService {
         @Inject(CACHE_MANAGER) private readonly cache: Cache,
     ) { }
 
-    private async atualizarCacheDaWishlist(casalId: string) {
-        const chaves = [
-            `/filmes/wishlist/${casalId}`,
-            `/filmes/wishlist/${casalId}?assistidos=true`,
-            `/filmes/wishlist/${casalId}?assistidos=false`,
-        ];
+    // o cache do UserCacheInterceptor tem sufixo por usuario, entao as chaves
+    // dos dois membros do casal precisam ser apagadas
+    private async atualizarCacheDaWishlist(casalId: string, usuarioIds: (string | null)[]) {
+        const chaves = usuarioIds
+            .filter((usuarioId): usuarioId is string => Boolean(usuarioId))
+            .flatMap((usuarioId) => [
+                `/filmes/wishlist/${casalId}:user:${usuarioId}`,
+                `/filmes/wishlist/${casalId}?assistidos=true:user:${usuarioId}`,
+                `/filmes/wishlist/${casalId}?assistidos=false:user:${usuarioId}`,
+            ]);
 
         await Promise.all(chaves.map((chave) => this.cache.del(chave)));
     }
@@ -80,7 +84,7 @@ export class FilmesService {
             throw new BadRequestException('Os dados nescessarios nao foram informados');
         }
 
-        await this.validarCasal(data.casalId, data.usuarioId);
+        const casal = await this.validarCasal(data.casalId, data.usuarioId);
 
         const filmeLocal = await this.prisma.movie.findUnique({
             where: {
@@ -120,7 +124,7 @@ export class FilmesService {
             throw error;
         }
 
-        await this.atualizarCacheDaWishlist(data.casalId);
+        await this.atualizarCacheDaWishlist(data.casalId, [casal.user1Id, casal.user2Id]);
 
         return {code: 201, message: 'O filme foi adicionado com sucesso!'}
 
@@ -131,7 +135,7 @@ export class FilmesService {
             throw new BadRequestException('Os dados nescessarios nao foram informadoss');
         }
 
-        await this.validarCasal(data.casalId, data.usuarioId);
+        const casal = await this.validarCasal(data.casalId, data.usuarioId);
 
         const validaWishlist = await this.prisma.wishlistItem.findFirst({
             where: {
@@ -166,7 +170,7 @@ export class FilmesService {
             }
         })
 
-        await this.atualizarCacheDaWishlist(data.casalId);
+        await this.atualizarCacheDaWishlist(data.casalId, [casal.user1Id, casal.user2Id]);
 
         return {code: 200, message: 'O filme foi removido com sucesso!'}
 
@@ -245,7 +249,7 @@ export class FilmesService {
             throw new NotFoundException('Nao foi possivel encontrar o filme na wishlist');
         }
 
-        await this.validarCasal(item.coupleId, data.usuarioId);
+        const casal = await this.validarCasal(item.coupleId, data.usuarioId);
 
         if (item.watched) {
             throw new ConflictException('O filme ja foi marcado como assistido');
@@ -289,7 +293,7 @@ export class FilmesService {
             });
         });
 
-        await this.atualizarCacheDaWishlist(item.coupleId);
+        await this.atualizarCacheDaWishlist(item.coupleId, [casal.user1Id, casal.user2Id]);
 
         return {
             wishlistItemId: item.id,

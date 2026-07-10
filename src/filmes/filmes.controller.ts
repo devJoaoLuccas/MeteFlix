@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
-import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
+import { UserCacheInterceptor } from 'src/common/user-cache.interceptor';
 import { FilmesService } from './filmes.service';
 import { Throttle } from '@nestjs/throttler';
 
@@ -9,7 +10,7 @@ export class FilmesController {
     constructor(private readonly filmesService: FilmesService) { }
 
     @Get('wishlist/:casalId')
-    @UseInterceptors(CacheInterceptor)
+    @UseInterceptors(UserCacheInterceptor)
     @CacheTTL(30000)
     @UseGuards(AuthGuard)
     listarWishlist(
