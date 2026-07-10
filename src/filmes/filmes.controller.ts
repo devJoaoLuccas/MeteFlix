@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Request, UseGuards, UseInterceptors } from '@nestjs/common';
 import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { AuthGuard, TokenPayload } from 'src/auth/auth.guard';
 import { FilmesService } from './filmes.service';
@@ -32,6 +32,19 @@ export class FilmesController {
     ) {
         return this.filmesService.getFilmeAleatorio({
             casalId,
+            usuarioId: req.usuario.sub,
+        });
+    }
+
+    @Patch('wishlist/:id/mark-watched')
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @UseGuards(AuthGuard)
+    marcarComoAssistido(
+        @Param('id') id: string,
+        @Request() req: { usuario: TokenPayload },
+    ) {
+        return this.filmesService.marcarComoAssistido({
+            wishlistItemId: id,
             usuarioId: req.usuario.sub,
         });
     }

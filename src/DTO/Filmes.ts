@@ -20,3 +20,8 @@ export interface FilmeAleatorio {
     casalId: string;
     usuarioId: string;
 }
+
+export interface MarcarAssistido {
+    wishlistItemId: string;
+    usuarioId: string;
+}

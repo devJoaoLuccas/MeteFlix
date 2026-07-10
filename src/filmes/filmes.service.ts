@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, ConflictException, ForbiddenE
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from 'generated/prisma/client';
-import { AdicionarFilme, FilmeAleatorio, ListarWishlist, RemoverFilme } from 'src/DTO/Filmes';
+import { AdicionarFilme, FilmeAleatorio, ListarWishlist, MarcarAssistido, RemoverFilme } from 'src/DTO/Filmes';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -221,6 +221,81 @@ export class FilmesService {
         }
 
         return { code: 200, filme: sorteado };
+
+    }
+
+    async marcarComoAssistido(data: MarcarAssistido) {
+        if (!data.wishlistItemId || !data.usuarioId) {
+            throw new BadRequestException('Os dados nescessarios nao foram informados');
+        }
+
+        const item = await this.prisma.wishlistItem.findUnique({
+            where: {
+                id: data.wishlistItemId,
+            },
+            select: {
+                id: true,
+                watched: true,
+                coupleId: true,
+                movieId: true,
+            },
+        });
+
+        if (!item) {
+            throw new NotFoundException('Nao foi possivel encontrar o filme na wishlist');
+        }
+
+        await this.validarCasal(item.coupleId, data.usuarioId);
+
+        if (item.watched) {
+            throw new ConflictException('O filme ja foi marcado como assistido');
+        }
+
+        const historico = await this.prisma.$transaction(async (tx) => {
+            const jaAssistido = await tx.watchHistory.findFirst({
+                where: {
+                    coupleId: item.coupleId,
+                    movieId: item.movieId,
+                },
+            });
+
+            if (jaAssistido) {
+                throw new ConflictException('O casal ja marcou esse filme como assistido');
+            }
+
+            const atualizado = await tx.wishlistItem.updateMany({
+                where: {
+                    id: item.id,
+                    watched: false,
+                },
+                data: {
+                    watched: true,
+                },
+            });
+
+            if (atualizado.count === 0) {
+                throw new ConflictException('O casal ja marcou esse filme como assistido');
+            }
+
+            return tx.watchHistory.create({
+                data: {
+                    coupleId: item.coupleId,
+                    movieId: item.movieId,
+                },
+                select: {
+                    id: true,
+                    watchedAt: true,
+                },
+            });
+        });
+
+        await this.atualizarCacheDaWishlist(item.coupleId);
+
+        return {
+            wishlistItemId: item.id,
+            watchHistoryId: historico.id,
+            watchedAt: historico.watchedAt,
+        };
 
     }
 
