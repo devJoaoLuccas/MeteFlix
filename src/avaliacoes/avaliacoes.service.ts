@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { DashboardCasal } from 'src/DTO/Avaliacoes';
+import { DashboardCasal, DetalheAvaliacao } from 'src/DTO/Avaliacoes';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -76,6 +76,80 @@ export class AvaliacoesService {
             totalEvaluated: movies.length,
             coupleAverage: Math.round(mediaGeral * 10) / 10,
             movies,
+        };
+
+    }
+
+    async getDetalheAvaliacao(data: DetalheAvaliacao) {
+        if (!data.casalId || !data.usuarioId || !data.tmdbId) {
+            throw new BadRequestException('Os dados nescessarios nao foram informados');
+        }
+
+        await this.validarCasal(data.casalId, data.usuarioId);
+
+        // filtrar pelo coupleId garante que a sessao pertence ao casal do usuario
+        const sessao = await this.prisma.watchHistory.findFirst({
+            where: {
+                coupleId: data.casalId,
+                movie: {
+                    tmdbId: data.tmdbId,
+                },
+            },
+            orderBy: {
+                watchedAt: 'desc',
+            },
+            select: {
+                watchedAt: true,
+                movie: {
+                    select: {
+                        tmdbId: true,
+                        title: true,
+                        posterPath: true,
+                        overview: true,
+                        releaseYear: true,
+                    },
+                },
+                ratings: {
+                    select: {
+                        nota: true,
+                        opiniao: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                photoUrl: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!sessao) {
+            throw new NotFoundException('O casal ainda nao assistiu esse filme');
+        }
+
+        const evaluations = sessao.ratings.map((avaliacao) => ({
+            userId: avaliacao.user.id,
+            userName: avaliacao.user.name,
+            userPhotoUrl: avaliacao.user.photoUrl,
+            rating: avaliacao.nota,
+            comment: avaliacao.opiniao,
+        }));
+
+        const coupleRating = evaluations.length === 0
+            ? 0
+            : evaluations.reduce((soma, avaliacao) => soma + avaliacao.rating, 0) / evaluations.length;
+
+        return {
+            movieId: sessao.movie.tmdbId,
+            title: sessao.movie.title,
+            posterPath: sessao.movie.posterPath,
+            overview: sessao.movie.overview,
+            releaseYear: sessao.movie.releaseYear,
+            watchedAt: sessao.watchedAt,
+            coupleRating: Math.round(coupleRating * 100) / 100,
+            evaluations,
         };
 
     }
