@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, ConflictException, ForbiddenE
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Prisma } from 'generated/prisma/client';
-import { AdicionarFilme, ListarWishlist, RemoverFilme } from 'src/DTO/Filmes';
+import { AdicionarFilme, FilmeAleatorio, ListarWishlist, RemoverFilme } from 'src/DTO/Filmes';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -169,6 +169,58 @@ export class FilmesService {
         await this.atualizarCacheDaWishlist(data.casalId);
 
         return {code: 200, message: 'O filme foi removido com sucesso!'}
+
+    }
+
+    async getFilmeAleatorio(data: FilmeAleatorio) {
+        if (!data.casalId || !data.usuarioId) {
+            throw new BadRequestException('Os dados nescessarios nao foram informados');
+        }
+
+        await this.validarCasal(data.casalId, data.usuarioId);
+
+        const total = await this.prisma.wishlistItem.count({
+            where: {
+                coupleId: data.casalId,
+                watched: false,
+            },
+        });
+
+        if (total === 0) {
+            throw new NotFoundException('Nao ha filmes sem assistir na wishlist do casal');
+        }
+
+        const sorteado = await this.prisma.wishlistItem.findFirst({
+            where: {
+                coupleId: data.casalId,
+                watched: false,
+            },
+            skip: Math.floor(Math.random() * total),
+            select: {
+                addedBy: {
+                    select: {
+                        name: true,
+                        photoUrl: true,
+                    },
+                },
+                createdAt: true,
+                movie: {
+                    select: {
+                        tmdbId: true,
+                        title: true,
+                        posterPath: true,
+                        overview: true,
+                        releaseYear: true,
+                    },
+                },
+            },
+        });
+
+        if (!sorteado) {
+            throw new NotFoundException('Nao ha filmes sem assistir na wishlist do casal');
+        }
+
+        return { code: 200, filme: sorteado };
 
     }
 

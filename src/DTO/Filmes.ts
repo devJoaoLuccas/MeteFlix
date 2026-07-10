@@ -10,8 +10,13 @@ export interface AdicionarFilme {
     tmdbId: number;
 }
 
-export interface RemoverFilme { 
+export interface RemoverFilme {
     casalId: string;
     usuarioId: string;
     tmdbId: number;
+}
+
+export interface FilmeAleatorio {
+    casalId: string;
+    usuarioId: string;
 }

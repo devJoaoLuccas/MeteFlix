@@ -24,6 +24,18 @@ export class FilmesController {
         });
     }
 
+    @Get('wishlist/:casalId/aleatorio')
+    @UseGuards(AuthGuard)
+    getFilmeAleatorio(
+        @Param('casalId') casalId: string,
+        @Request() req: { usuario: TokenPayload },
+    ) {
+        return this.filmesService.getFilmeAleatorio({
+            casalId,
+            usuarioId: req.usuario.sub,
+        });
+    }
+
     @Post('wishlist/:casalId')
     @Throttle({ default: { limit: 5, ttl: 60000 } })
     @UseGuards(AuthGuard)
